@@ -16,7 +16,7 @@ interface Claim {
 export default function Claims() {
   const { user } = useAuth();
   const [claims, setClaims] = useState<Claim[]>([]);
-  const [categories, setCategories] = useState<{id: number, name: string, code: string}[]>([]);
+  const [categories, setCategories] = useState<{id: number, name: string, code: string, maxLimit?: number}[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [employeeFilter, setEmployeeFilter] = useState('');
