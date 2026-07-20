@@ -1,0 +1,10 @@
+{
+  "name": "ERMS",
+  "short_name": "ERMS",
+  "description": "Expense Reimbursement Management System",
+  "icons": [],
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#000000"
+}
