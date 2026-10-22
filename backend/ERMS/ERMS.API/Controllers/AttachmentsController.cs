@@ -75,4 +75,24 @@ public class AttachmentsController : ControllerBase
         await _attachmentService.DeleteAttachmentAsync(id, employeeId);
         return Ok(ApiResponse<object>.Ok(null, "Attachment deleted successfully."));
     }
+
+    [HttpGet("download-monthly-zip")]
+    [Authorize(Roles = "SUPER_ADMIN,ADMIN")]
+    public async Task<IActionResult> DownloadMonthlyBillsZip(
+        [FromQuery] DateTimeOffset? startDate,
+        [FromQuery] DateTimeOffset? endDate,
+        CancellationToken cancellationToken)
+    {
+        var end = endDate ?? DateTimeOffset.UtcNow;
+        var start = startDate ?? end.AddMonths(-1);
+
+        var (zipBytes, fileName) = await _attachmentService.DownloadMonthlyBillsZipAsync(start, end, cancellationToken);
+
+        if (zipBytes == null || zipBytes.Length == 0)
+        {
+            return BadRequest(ApiResponse<object>.Fail("No bills/attachments found for the selected date range."));
+        }
+
+        return File(zipBytes, "application/zip", fileName);
+    }
 }

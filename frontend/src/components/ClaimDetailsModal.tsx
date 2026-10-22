@@ -48,6 +48,8 @@ export default function ClaimDetailsModal({ claimId, onClose, onRefresh }: Claim
     }
   }, [claim]);
 
+  // Commented out approval/rejection handler temporarily as requested
+  /*
   const handleAdminAction = async (actionId: number) => {
     if (actionId === 5 && !remarks) {
       alert("Remarks are mandatory for rejection.");
@@ -70,6 +72,7 @@ export default function ClaimDetailsModal({ claimId, onClose, onRefresh }: Claim
       alert(err.response?.data?.message || 'An error occurred');
     }
   };
+  */
 
   const handleFileUpload = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -123,9 +126,19 @@ export default function ClaimDetailsModal({ claimId, onClose, onRefresh }: Claim
 
   if (!claim) return null;
 
+  const totalAmount = (claim.totalAmount !== undefined && claim.totalAmount !== null)
+    ? claim.totalAmount
+    : (claim.travelDetails?.calculatedAmount || claim.hotelDetails?.amount || claim.foodDetails?.amount || claim.rechargeDetails?.amount || 0);
+
+  const displayDate = claim.claimDate 
+    || claim.travelDetails?.travelDate 
+    || claim.foodDetails?.foodDate 
+    || claim.hotelDetails?.checkInDate 
+    || (claim.submittedAt ? new Date(claim.submittedAt).toLocaleDateString() : 'N/A');
+
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '700px' }}>
+      <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '700px', maxHeight: '90vh', overflowY: 'auto' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
           <h2 style={{ margin: 0 }}>Claim Details: {claim.claimNumber}</h2>
           <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: 'var(--text-muted)' }}>×</button>
@@ -134,8 +147,10 @@ export default function ClaimDetailsModal({ claimId, onClose, onRefresh }: Claim
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.5rem' }}>
           <div><strong>Employee:</strong> {claim.employeeName}</div>
           <div><strong>Category:</strong> {claim.expenseCategoryName}</div>
-          <div><strong>Amount:</strong> ₹{claim.travelDetails?.totalAmount || claim.hotelDetails?.amount || claim.foodDetails?.amount || claim.rechargeDetails?.amount || 0}</div>
+          <div><strong>Amount:</strong> ₹{Number(totalAmount).toFixed(2)}</div>
           <div><strong>Status:</strong> {claim.statusName}</div>
+          <div><strong>Expense Date:</strong> {displayDate}</div>
+          {claim.submittedAt && <div><strong>Submitted At:</strong> {new Date(claim.submittedAt).toLocaleDateString()}</div>}
         </div>
 
         {/* Polymorphic Details */}
@@ -143,21 +158,36 @@ export default function ClaimDetailsModal({ claimId, onClose, onRefresh }: Claim
           <h3 style={{ marginBottom: '1rem', fontSize: '1rem' }}>Expense Specifics</h3>
           {claim.travelDetails && (
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', fontSize: '0.875rem' }}>
-              <div><strong>Date:</strong> {claim.travelDetails.travelDate}</div>
+              <div><strong>Travel Date:</strong> {claim.travelDetails.travelDate}</div>
               <div><strong>Day:</strong> {claim.travelDetails.day}</div>
-              <div><strong>From:</strong> {claim.travelDetails.fromLocation}</div>
-              <div><strong>To:</strong> {claim.travelDetails.toLocation}</div>
+              <div><strong>Start Point:</strong> {claim.travelDetails.fromLocation}</div>
+              <div><strong>End Point:</strong> {claim.travelDetails.toLocation}</div>
+              {claim.travelDetails.placeVisited && <div><strong>Place Visited:</strong> {claim.travelDetails.placeVisited}</div>}
+              {claim.travelDetails.modeOfTransport && <div><strong>Transport Mode:</strong> {claim.travelDetails.modeOfTransport}</div>}
               <div><strong>Total Km:</strong> {claim.travelDetails.totalKm} km</div>
               <div><strong>Rate/Km:</strong> ₹{claim.travelDetails.ratePerKm}</div>
+              <div><strong>Calculated Amount:</strong> ₹{claim.travelDetails.calculatedAmount}</div>
             </div>
           )}
           {claim.hotelDetails && (
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', fontSize: '0.875rem' }}>
               <div><strong>Check-in:</strong> {claim.hotelDetails.checkInDate}</div>
               <div><strong>Check-out:</strong> {claim.hotelDetails.checkOutDate}</div>
+              <div><strong>Total Amount:</strong> ₹{claim.hotelDetails.amount}</div>
             </div>
           )}
-          {!claim.travelDetails && !claim.hotelDetails && (
+          {claim.foodDetails && (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', fontSize: '0.875rem' }}>
+              <div><strong>Food Date:</strong> {claim.foodDetails.foodDate || 'N/A'}</div>
+              <div><strong>Daily Allowance Amount:</strong> ₹{claim.foodDetails.amount}</div>
+            </div>
+          )}
+          {claim.rechargeDetails && (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', fontSize: '0.875rem' }}>
+              <div><strong>Mobile Recharge Amount:</strong> ₹{claim.rechargeDetails.amount}</div>
+            </div>
+          )}
+          {!claim.travelDetails && !claim.hotelDetails && !claim.foodDetails && !claim.rechargeDetails && (
              <p style={{ fontSize: '0.875rem' }}>Standard flat rate expense.</p>
           )}
         </div>
@@ -189,7 +219,8 @@ export default function ClaimDetailsModal({ claimId, onClose, onRefresh }: Claim
           )}
         </div>
 
-        {/* Admin Actions */}
+        {/* Temporary: Approval and rejection flow disabled as requested. All claims are auto-approved. */}
+        {/*
         {(user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN') && claim.statusName === 'Submitted' && (
           <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '1.5rem' }}>
             <h3 style={{ marginBottom: '1rem', fontSize: '1rem' }}>Admin Actions</h3>
@@ -209,6 +240,7 @@ export default function ClaimDetailsModal({ claimId, onClose, onRefresh }: Claim
             </div>
           </div>
         )}
+        */}
 
       </div>
     </div>

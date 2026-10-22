@@ -1,4 +1,4 @@
-﻿using ERMS.Domain.Entities;
+using ERMS.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -21,6 +21,14 @@ public class TravelClaimConfiguration : IEntityTypeConfiguration<TravelClaim>
         builder.Property(travelClaim => travelClaim.ToLocation)
             .IsRequired()
             .HasMaxLength(200);
+
+        builder.Property(travelClaim => travelClaim.PlaceVisited)
+            .HasMaxLength(200)
+            .IsRequired(false);
+
+        builder.Property(travelClaim => travelClaim.ModeOfTransport)
+            .HasMaxLength(50)
+            .IsRequired(false);
 
         builder.Property(travelClaim => travelClaim.TotalKm)
             .HasPrecision(10, 2);

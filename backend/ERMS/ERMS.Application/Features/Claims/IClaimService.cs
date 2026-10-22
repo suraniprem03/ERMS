@@ -12,4 +12,5 @@ public interface IClaimService
     Task<ClaimDto> UpdateDraftAsync(long id, long employeeId, UpdateClaimRequest request, CancellationToken cancellationToken = default);
     Task<ClaimDto> SubmitClaimAsync(long id, long employeeId, CancellationToken cancellationToken = default);
     Task<ClaimDto> ProcessAdminActionAsync(long id, long adminUserId, AdminActionRequest request, CancellationToken cancellationToken = default);
+    Task<int> ApproveAllPendingClaimsAsync(long adminUserId, string? remarks = null, CancellationToken cancellationToken = default);
 }
