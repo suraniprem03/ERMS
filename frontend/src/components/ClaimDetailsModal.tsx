@@ -5,7 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 interface ClaimDetailsModalProps {
   claimId: number;
   onClose: () => void;
-  onRefresh: () => void;
+  onRefresh?: () => void;
 }
 
 export default function ClaimDetailsModal({ claimId, onClose, onRefresh }: ClaimDetailsModalProps) {
@@ -14,7 +14,6 @@ export default function ClaimDetailsModal({ claimId, onClose, onRefresh }: Claim
   const [attachments, setAttachments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   
-  const [remarks, setRemarks] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
 
@@ -48,32 +47,6 @@ export default function ClaimDetailsModal({ claimId, onClose, onRefresh }: Claim
     }
   }, [claim]);
 
-  // Commented out approval/rejection handler temporarily as requested
-  /*
-  const handleAdminAction = async (actionId: number) => {
-    if (actionId === 5 && !remarks) {
-      alert("Remarks are mandatory for rejection.");
-      return;
-    }
-    
-    try {
-      const payload = {
-        action: actionId, // 4 = Approved, 5 = Rejected, 3 = Returned
-        remarks: remarks || null
-      };
-      const res = await api.post(`/claims/${claimId}/process`, payload);
-      if (res.data.success) {
-        onRefresh();
-        onClose();
-      } else {
-        alert(res.data.message || 'Action failed');
-      }
-    } catch (err: any) {
-      alert(err.response?.data?.message || 'An error occurred');
-    }
-  };
-  */
-
   const handleFileUpload = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!file) return;
@@ -90,6 +63,7 @@ export default function ClaimDetailsModal({ claimId, onClose, onRefresh }: Claim
       if (res.data.success) {
         setFile(null);
         fetchClaimDetails();
+        if (onRefresh) onRefresh();
       } else {
         alert(res.data.message || 'Upload failed');
       }
@@ -218,29 +192,6 @@ export default function ClaimDetailsModal({ claimId, onClose, onRefresh }: Claim
             </form>
           )}
         </div>
-
-        {/* Temporary: Approval and rejection flow disabled as requested. All claims are auto-approved. */}
-        {/*
-        {(user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN') && claim.statusName === 'Submitted' && (
-          <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '1.5rem' }}>
-            <h3 style={{ marginBottom: '1rem', fontSize: '1rem' }}>Admin Actions</h3>
-            <textarea 
-              placeholder="Enter remarks (Mandatory for rejection)" 
-              value={remarks} 
-              onChange={e => setRemarks(e.target.value)}
-              style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border-color)', marginBottom: '1rem', minHeight: '80px' }}
-            />
-            <div style={{ display: 'flex', gap: '1rem' }}>
-              <button className="btn-primary" style={{ background: 'var(--success, #10b981)', borderColor: 'var(--success, #10b981)', color: '#ffffff' }} onClick={() => handleAdminAction(4)}>
-                Approve Claim
-              </button>
-              <button className="btn-primary" style={{ background: 'var(--error, #ef4444)', borderColor: 'var(--error, #ef4444)', color: '#ffffff' }} onClick={() => handleAdminAction(5)}>
-                Reject Claim
-              </button>
-            </div>
-          </div>
-        )}
-        */}
 
       </div>
     </div>
