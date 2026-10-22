@@ -10,13 +10,28 @@ interface Claim {
   totalAmount: number;
   statusName: string;
   submittedAt?: string;
+  claimDate?: string;
   employeeName: string;
+  travelDetails?: { 
+    travelDate: string;
+    day?: string;
+    fromLocation?: string;
+    toLocation?: string;
+    placeVisited?: string;
+    modeOfTransport?: string;
+    totalKm?: number;
+    ratePerKm?: number;
+    calculatedAmount?: number;
+  };
+  foodDetails?: { foodDate?: string; amount: number };
+  hotelDetails?: { checkInDate: string; checkOutDate: string; amount: number };
+  rechargeDetails?: { amount: number };
 }
 
 export default function Claims() {
   const { user } = useAuth();
   const [claims, setClaims] = useState<Claim[]>([]);
-  const [categories, setCategories] = useState<{id: number, name: string, code: string}[]>([]);
+  const [categories, setCategories] = useState<{id: number, name: string, code: string, maxLimit?: number}[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [employeeFilter, setEmployeeFilter] = useState('');
@@ -27,14 +42,38 @@ export default function Claims() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   
+  // Zip Download Modal State
+  const getDefaultDates = () => {
+    const now = new Date();
+    const past = new Date();
+    past.setMonth(past.getMonth() - 1);
+    return {
+      start: past.toISOString().split('T')[0],
+      end: now.toISOString().split('T')[0]
+    };
+  };
+
+  const [isZipModalOpen, setIsZipModalOpen] = useState(false);
+  const [zipDateRange, setZipDateRange] = useState(getDefaultDates());
+  const [downloadingZip, setDownloadingZip] = useState(false);
+
   // Form State
   const [categoryId, setCategoryId] = useState('');
   const [selectedCategoryCode, setSelectedCategoryCode] = useState('');
   
   // Polymorphic Form Data
-  const [travelDetails, setTravelDetails] = useState({ travelDate: '', day: '', fromLocation: '', toLocation: '', totalKm: '', ratePerKm: '' });
+  const [travelDetails, setTravelDetails] = useState({ 
+    travelDate: '', 
+    day: '', 
+    fromLocation: '', 
+    toLocation: '', 
+    placeVisited: '',
+    modeOfTransport: 'Bus',
+    totalKm: '', 
+    ratePerKm: '' 
+  });
   const [hotelDetails, setHotelDetails] = useState({ checkInDate: '', checkOutDate: '', amount: '' });
-  const [foodDetails, setFoodDetails] = useState({ amount: '' });
+  const [foodDetails, setFoodDetails] = useState({ foodDate: '', amount: '' });
   const [rechargeDetails, setRechargeDetails] = useState({ amount: '' });
 
   const fetchClaims = async () => {
@@ -83,6 +122,22 @@ export default function Claims() {
     }
   };
 
+  const handleTravelDateChange = (dateStr: string) => {
+    if (!dateStr) {
+      setTravelDetails(prev => ({ ...prev, travelDate: '', day: '' }));
+      return;
+    }
+    const [y, m, d] = dateStr.split('-').map(Number);
+    const dateObj = new Date(y, m - 1, d);
+    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const dayName = dayNames[dateObj.getDay()] || '';
+    setTravelDetails(prev => ({
+      ...prev,
+      travelDate: dateStr,
+      day: dayName
+    }));
+  };
+
   const handleCreate = async (e: React.FormEvent, isSubmit: boolean) => {
     e.preventDefault();
     try {
@@ -103,7 +158,10 @@ export default function Claims() {
           amount: parseFloat(hotelDetails.amount)
         };
       } else if (selectedCategoryCode === 'FOOD') {
-        payload.foodDetails = { amount: parseFloat(foodDetails.amount) };
+        payload.foodDetails = { 
+          foodDate: foodDetails.foodDate || null,
+          amount: parseFloat(foodDetails.amount) 
+        };
       } else if (selectedCategoryCode === 'RECHARGE') {
         payload.rechargeDetails = { amount: parseFloat(rechargeDetails.amount) };
       }
@@ -129,7 +187,7 @@ export default function Claims() {
             if (isSubmit) {
               await api.post(`/claims/${newClaimId}/submit`);
             }
-            alert(isSubmit ? 'Claim submitted successfully with attachment!' : 'Claim saved as draft with attachment.');
+            alert(isSubmit ? 'Claim submitted and approved successfully with attachment!' : 'Claim saved as draft with attachment.');
           } catch (uploadErr) {
             console.error('File upload failed', uploadErr);
             alert('Claim created, but file upload failed.');
@@ -137,16 +195,25 @@ export default function Claims() {
             setUploadProgress(null);
           }
         } else {
-          alert(isSubmit ? 'Claim submitted successfully!' : 'Claim saved as draft.');
+          alert(isSubmit ? 'Claim submitted and approved successfully!' : 'Claim saved as draft.');
         }
 
         setIsSubmitModalOpen(false);
         // Reset states
         setCategoryId('');
         setSelectedCategoryCode('');
-        setTravelDetails({ travelDate: '', day: '', fromLocation: '', toLocation: '', totalKm: '', ratePerKm: '' });
+        setTravelDetails({ 
+          travelDate: '', 
+          day: '', 
+          fromLocation: '', 
+          toLocation: '', 
+          placeVisited: '',
+          modeOfTransport: 'Bus',
+          totalKm: '', 
+          ratePerKm: '' 
+        });
         setHotelDetails({ checkInDate: '', checkOutDate: '', amount: '' });
-        setFoodDetails({ amount: '' });
+        setFoodDetails({ foodDate: '', amount: '' });
         setRechargeDetails({ amount: '' });
         setSelectedFile(null);
         fetchClaims();
@@ -183,6 +250,69 @@ export default function Claims() {
     }
   };
 
+  // Commented out approval flow temporarily as requested: all claims default to Approved
+  /*
+  const handleApproveAll = async () => {
+    const pendingClaims = claims.filter(c => c.statusName === 'Submitted');
+    if (pendingClaims.length === 0) {
+      alert('There are no pending claims to approve.');
+      return;
+    }
+
+    if (window.confirm(`Are you sure you want to approve all ${pendingClaims.length} pending claims?`)) {
+      try {
+        setLoading(true);
+        const res = await api.post('/claims/approve-all', {});
+        if (res.data.success) {
+          alert(res.data.message || `Successfully approved ${pendingClaims.length} claims!`);
+          await fetchClaims();
+        } else {
+          alert(res.data.message || 'Failed to approve claims');
+        }
+      } catch (err: any) {
+        alert(err.response?.data?.message || 'An error occurred while approving claims');
+      } finally {
+        setLoading(false);
+      }
+    }
+  };
+  */
+
+  const handleDownloadMonthlyZip = async () => {
+    try {
+      setDownloadingZip(true);
+      const startIso = new Date(zipDateRange.start).toISOString();
+      const endIso = new Date(zipDateRange.end + 'T23:59:59.999Z').toISOString();
+      const res = await api.get(`/attachments/download-monthly-zip?startDate=${encodeURIComponent(startIso)}&endDate=${encodeURIComponent(endIso)}`, {
+        responseType: 'blob'
+      });
+
+      const blob = new Blob([res.data], { type: 'application/zip' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `Bills_${zipDateRange.start}_to_${zipDateRange.end}.zip`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setIsZipModalOpen(false);
+    } catch (err) {
+      console.error('Failed to download bills zip', err);
+      alert('Failed to download bills archive. Please check if any approved bills exist in that date range.');
+    } finally {
+      setDownloadingZip(false);
+    }
+  };
+
+  const getDisplayDate = (claim: Claim) => {
+    if (claim.claimDate) return claim.claimDate;
+    if (claim.travelDetails?.travelDate) return claim.travelDetails.travelDate;
+    if (claim.foodDetails?.foodDate) return claim.foodDetails.foodDate;
+    if (claim.hotelDetails?.checkInDate) return claim.hotelDetails.checkInDate;
+    if (claim.submittedAt) return new Date(claim.submittedAt).toLocaleDateString();
+    return 'N/A';
+  };
+
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', flexWrap: 'wrap', gap: '1rem' }}>
@@ -191,7 +321,7 @@ export default function Claims() {
           <p style={{ color: 'var(--text-muted)' }}>Manage and submit your expense claims.</p>
         </div>
         
-        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
           {(user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN') && (
             <select 
               value={employeeFilter} 
@@ -210,17 +340,41 @@ export default function Claims() {
             style={{ padding: '0.5rem', borderRadius: '4px', border: '1px solid var(--border-color)', height: '40px' }}
           >
             <option value="ALL">All Statuses</option>
+            <option value="Approved">Approved</option>
             <option value="Draft">Draft</option>
             <option value="Submitted">Submitted (Pending)</option>
-            <option value="Approved">Approved</option>
             <option value="Rejected">Rejected</option>
             <option value="Returned">Returned</option>
           </select>
 
           {(user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN') && (
-            <button className="btn-secondary" style={{ width: 'auto' }} onClick={handleExportExcel}>
-              ⬇ Export Excel
-            </button>
+            <>
+              {/* Temporary: Approval flow disabled - claims are auto-approved */}
+              {/*
+              <button 
+                className="btn-primary" 
+                style={{ width: 'auto', background: 'var(--success, #10b981)', borderColor: 'var(--success, #10b981)', color: '#ffffff' }} 
+                onClick={handleApproveAll}
+                title="Approve all currently submitted pending claims"
+              >
+                ✓ Approve All
+              </button>
+              */}
+              <button 
+                className="btn-secondary" 
+                style={{ width: 'auto' }} 
+                onClick={() => {
+                  setZipDateRange(getDefaultDates());
+                  setIsZipModalOpen(true);
+                }}
+                title="Download approved monthly receipts as employee-structured ZIP"
+              >
+                📦 Download Bills (ZIP)
+              </button>
+              <button className="btn-secondary" style={{ width: 'auto' }} onClick={handleExportExcel}>
+                ⬇ Export Excel
+              </button>
+            </>
           )}
           <button className="btn-primary" style={{ width: 'auto' }} onClick={() => setIsSubmitModalOpen(true)}>
             + Submit Claim
@@ -266,7 +420,7 @@ export default function Claims() {
                         {claim.statusName}
                       </span>
                     </td>
-                    <td>{claim.submittedAt ? new Date(claim.submittedAt).toLocaleDateString() : 'N/A'}</td>
+                    <td>{getDisplayDate(claim)}</td>
                   </tr>
                 ))
               )}
@@ -286,7 +440,7 @@ export default function Claims() {
       {/* Polymorphic Submit Modal */}
       {isSubmitModalOpen && (
         <div className="modal-overlay" onClick={() => setIsSubmitModalOpen(false)}>
-          <div className="modal-content" onClick={e => e.stopPropagation()}>
+          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '620px', maxHeight: '90vh', overflowY: 'auto' }}>
             <h2 style={{ marginBottom: '1.5rem', fontSize: '1.5rem' }}>New Expense Claim</h2>
             
             <form onSubmit={(e) => handleCreate(e, true)}>
@@ -303,30 +457,66 @@ export default function Claims() {
                   <div className="form-group-grid">
                     <div className="form-group">
                       <label>Travel Date</label>
-                      <input type="date" required value={travelDetails.travelDate} onChange={e => setTravelDetails({...travelDetails, travelDate: e.target.value})} />
+                      <input 
+                        type="date" 
+                        required 
+                        value={travelDetails.travelDate} 
+                        onChange={e => handleTravelDateChange(e.target.value)} 
+                      />
                     </div>
                     <div className="form-group">
-                      <label>Day</label>
-                      <select required value={travelDetails.day} onChange={e => setTravelDetails({...travelDetails, day: e.target.value})}>
-                        <option value="">Select...</option>
-                        <option value="Monday">Monday</option>
-                        <option value="Tuesday">Tuesday</option>
-                        <option value="Wednesday">Wednesday</option>
-                        <option value="Thursday">Thursday</option>
-                        <option value="Friday">Friday</option>
-                        <option value="Saturday">Saturday</option>
-                        <option value="Sunday">Sunday</option>
-                      </select>
+                      <label>Day (Auto-Selected)</label>
+                      <input 
+                        type="text" 
+                        required 
+                        readOnly 
+                        value={travelDetails.day} 
+                        placeholder="Select a date first"
+                        style={{ backgroundColor: '#f1f5f9', cursor: 'not-allowed' }}
+                      />
                     </div>
                   </div>
                   <div className="form-group-grid">
                     <div className="form-group">
-                      <label>From Location</label>
-                      <input required value={travelDetails.fromLocation} onChange={e => setTravelDetails({...travelDetails, fromLocation: e.target.value})} />
+                      <label>Start Point (From)</label>
+                      <input 
+                        required 
+                        value={travelDetails.fromLocation} 
+                        onChange={e => setTravelDetails({...travelDetails, fromLocation: e.target.value})} 
+                        placeholder="e.g. Ahmedabad"
+                      />
                     </div>
                     <div className="form-group">
-                      <label>To Location</label>
-                      <input required value={travelDetails.toLocation} onChange={e => setTravelDetails({...travelDetails, toLocation: e.target.value})} />
+                      <label>End Point (To)</label>
+                      <input 
+                        required 
+                        value={travelDetails.toLocation} 
+                        onChange={e => setTravelDetails({...travelDetails, toLocation: e.target.value})} 
+                        placeholder="e.g. Gandhinagar"
+                      />
+                    </div>
+                  </div>
+                  <div className="form-group-grid">
+                    <div className="form-group">
+                      <label>Place Visited</label>
+                      <input 
+                        value={travelDetails.placeVisited} 
+                        onChange={e => setTravelDetails({...travelDetails, placeVisited: e.target.value})} 
+                        placeholder="e.g. Old Counter Visit, Market Visit"
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label>Mode of Transport</label>
+                      <select 
+                        value={travelDetails.modeOfTransport} 
+                        onChange={e => setTravelDetails({...travelDetails, modeOfTransport: e.target.value})}
+                      >
+                        <option value="Bus">Bus</option>
+                        <option value="Train">Train</option>
+                        <option value="Auto">Auto</option>
+                        <option value="Cab">Cab</option>
+                        <option value="Bike / Personal Vehicle">Bike / Personal Vehicle</option>
+                      </select>
                     </div>
                   </div>
                   <div className="form-group-grid">
@@ -363,22 +553,46 @@ export default function Claims() {
                     </div>
                   </div>
                   <div className="form-group">
-                    <label>Total Amount</label>
+                    <label>Total Amount (Accommodation)</label>
                     <input type="number" step="0.01" required value={hotelDetails.amount} onChange={e => setHotelDetails({...hotelDetails, amount: e.target.value})} />
                   </div>
                 </>
               )}
 
-              {['FOOD', 'RECHARGE'].includes(selectedCategoryCode) && (
+              {selectedCategoryCode === 'FOOD' && (
+                <>
+                  <div className="form-group">
+                    <label>Food / Meal Date</label>
+                    <input 
+                      type="date" 
+                      required 
+                      value={foodDetails.foodDate} 
+                      onChange={e => setFoodDetails({...foodDetails, foodDate: e.target.value})} 
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Daily Allowance Amount</label>
+                    <input 
+                      type="number" 
+                      step="0.01" 
+                      required 
+                      value={foodDetails.amount} 
+                      onChange={e => setFoodDetails({...foodDetails, amount: e.target.value})} 
+                    />
+                  </div>
+                </>
+              )}
+
+              {selectedCategoryCode === 'RECHARGE' && (
                 <div className="form-group">
-                  <label>Total Amount</label>
-                  <input type="number" step="0.01" required value={
-                    selectedCategoryCode === 'FOOD' ? foodDetails.amount : rechargeDetails.amount
-                  } onChange={e => {
-                    const val = e.target.value;
-                    if (selectedCategoryCode === 'FOOD') setFoodDetails({ amount: val });
-                    else setRechargeDetails({ amount: val });
-                  }} />
+                  <label>Mobile Recharge Amount</label>
+                  <input 
+                    type="number" 
+                    step="0.01" 
+                    required 
+                    value={rechargeDetails.amount} 
+                    onChange={e => setRechargeDetails({ amount: e.target.value })} 
+                  />
                 </div>
               )}
 
@@ -417,6 +631,58 @@ export default function Claims() {
                 Cancel
               </button>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Monthly Bills ZIP Download Modal */}
+      {isZipModalOpen && (
+        <div className="modal-overlay" onClick={() => setIsZipModalOpen(false)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '480px' }}>
+            <h2 style={{ marginBottom: '0.75rem', fontSize: '1.35rem' }}>Download Bills Archive (ZIP)</h2>
+            <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem', fontSize: '0.875rem', lineHeight: '1.5' }}>
+              Downloads a structured ZIP archive containing all uploaded JPGs and PDFs of approved claims organized into folders by employee for the specified date range.
+            </p>
+
+            <div className="form-group-grid">
+              <div className="form-group">
+                <label>From Date</label>
+                <input 
+                  type="date" 
+                  value={zipDateRange.start} 
+                  onChange={e => setZipDateRange({ ...zipDateRange, start: e.target.value })} 
+                />
+              </div>
+              <div className="form-group">
+                <label>To Date</label>
+                <input 
+                  type="date" 
+                  value={zipDateRange.end} 
+                  onChange={e => setZipDateRange({ ...zipDateRange, end: e.target.value })} 
+                />
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '1rem', marginTop: '1.5rem' }}>
+              <button 
+                type="button" 
+                className="btn-primary" 
+                onClick={handleDownloadMonthlyZip} 
+                disabled={downloadingZip}
+                style={{ flex: 1 }}
+              >
+                {downloadingZip ? 'Generating ZIP...' : '⬇ Download ZIP'}
+              </button>
+              <button 
+                type="button" 
+                className="btn-secondary" 
+                onClick={() => setIsZipModalOpen(false)}
+                disabled={downloadingZip}
+                style={{ width: 'auto' }}
+              >
+                Cancel
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -19,6 +19,12 @@ public class CreateTravelClaimRequest
     [MaxLength(100)]
     public string ToLocation { get; set; } = string.Empty;
     
+    [MaxLength(200)]
+    public string? PlaceVisited { get; set; }
+
+    [MaxLength(50)]
+    public string? ModeOfTransport { get; set; }
+
     [Required]
     public decimal TotalKm { get; set; }
     

@@ -96,7 +96,8 @@ public class ClaimService : IClaimService
         var claimCount = await _dbContext.Claims.CountAsync(c => c.ClaimNumber.StartsWith($"CLM-{today}"), cancellationToken);
         var claimNumber = $"CLM-{today}-{(claimCount + 1):D4}";
 
-        var claimStatus = request.IsSubmit ? ClaimStatus.Submitted : ClaimStatus.Draft;
+        // Temporary: Default all submitted claims to Approved directly (bypassing approval flow)
+        var claimStatus = request.IsSubmit ? ClaimStatus.Approved : ClaimStatus.Draft;
 
         var claim = new Claim
         {
@@ -105,6 +106,8 @@ public class ClaimService : IClaimService
             ExpenseCategoryId = request.ExpenseCategoryId,
             Status = claimStatus,
             SubmittedAt = request.IsSubmit ? DateTimeOffset.UtcNow : null,
+            ApprovedAt = request.IsSubmit ? DateTimeOffset.UtcNow : null,
+            ApprovedByUserId = request.IsSubmit ? employeeId : null,
             CreatedAt = DateTimeOffset.UtcNow
         };
 
@@ -113,7 +116,7 @@ public class ClaimService : IClaimService
         claim.StatusHistory.Add(new ClaimStatusHistory
         {
             Status = claimStatus,
-            Comment = request.IsSubmit ? "Claim submitted" : "Claim created as draft",
+            Comment = request.IsSubmit ? "Claim submitted and auto-approved" : "Claim created as draft",
             CreatedBy = employeeId,
             CreatedAt = DateTimeOffset.UtcNow
         });
@@ -159,12 +162,15 @@ public class ClaimService : IClaimService
 
         if (request.IsSubmit)
         {
-            claim.Status = ClaimStatus.Submitted;
+            // Auto-approve when submitted as requested temporarily
+            claim.Status = ClaimStatus.Approved;
             claim.SubmittedAt = DateTimeOffset.UtcNow;
+            claim.ApprovedAt = DateTimeOffset.UtcNow;
+            claim.ApprovedByUserId = employeeId;
             claim.StatusHistory.Add(new ClaimStatusHistory
             {
-                Status = ClaimStatus.Submitted,
-                Comment = "Claim updated and submitted",
+                Status = ClaimStatus.Approved,
+                Comment = "Claim updated and auto-approved",
                 CreatedBy = employeeId,
                 CreatedAt = DateTimeOffset.UtcNow
             });
@@ -188,14 +194,17 @@ public class ClaimService : IClaimService
             throw new ValidationException("Only Draft or Returned claims can be submitted.");
         }
 
-        claim.Status = ClaimStatus.Submitted;
+        // Auto-approve when submitted as requested temporarily
+        claim.Status = ClaimStatus.Approved;
         claim.SubmittedAt = DateTimeOffset.UtcNow;
+        claim.ApprovedAt = DateTimeOffset.UtcNow;
+        claim.ApprovedByUserId = employeeId;
         claim.UpdatedAt = DateTimeOffset.UtcNow;
 
         claim.StatusHistory.Add(new ClaimStatusHistory
         {
-            Status = ClaimStatus.Submitted,
-            Comment = "Claim submitted",
+            Status = ClaimStatus.Approved,
+            Comment = "Claim submitted and auto-approved",
             CreatedBy = employeeId,
             CreatedAt = DateTimeOffset.UtcNow
         });
@@ -242,6 +251,41 @@ public class ClaimService : IClaimService
         return await GetByIdAsync(claim.Id, cancellationToken);
     }
 
+    public async Task<int> ApproveAllPendingClaimsAsync(long adminUserId, string? remarks = null, CancellationToken cancellationToken = default)
+    {
+        var pendingClaims = await _dbContext.Claims
+            .Where(c => c.Status == ClaimStatus.Submitted)
+            .ToListAsync(cancellationToken);
+
+        if (!pendingClaims.Any())
+        {
+            return 0;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var comment = string.IsNullOrWhiteSpace(remarks) ? "Bulk approved by admin" : remarks;
+
+        foreach (var claim in pendingClaims)
+        {
+            claim.Status = ClaimStatus.Approved;
+            claim.ApprovedAt = now;
+            claim.ApprovedByUserId = adminUserId;
+            claim.AdminRemarks = comment;
+            claim.UpdatedAt = now;
+
+            claim.StatusHistory.Add(new ClaimStatusHistory
+            {
+                Status = ClaimStatus.Approved,
+                Comment = comment,
+                CreatedBy = adminUserId,
+                CreatedAt = now
+            });
+        }
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return pendingClaims.Count;
+    }
+
     private void ValidateClaimDetails(string categoryCode, CreateClaimRequest request)
     {
         var upperCode = categoryCode.ToUpper();
@@ -272,6 +316,8 @@ public class ClaimService : IClaimService
                 Day = request.TravelDetails.Day,
                 FromLocation = request.TravelDetails.FromLocation,
                 ToLocation = request.TravelDetails.ToLocation,
+                PlaceVisited = request.TravelDetails.PlaceVisited,
+                ModeOfTransport = request.TravelDetails.ModeOfTransport,
                 TotalKm = request.TravelDetails.TotalKm,
                 RatePerKm = request.TravelDetails.RatePerKm,
                 CalculatedAmount = request.TravelDetails.TotalKm * request.TravelDetails.RatePerKm,
@@ -282,6 +328,7 @@ public class ClaimService : IClaimService
         {
             claim.FoodClaim = new FoodClaim
             {
+                FoodDate = request.FoodDetails.FoodDate,
                 Amount = request.FoodDetails.Amount,
                 CreatedAt = DateTimeOffset.UtcNow
             };
@@ -331,6 +378,8 @@ public class ClaimService : IClaimService
                 Day = claim.TravelClaim.Day,
                 FromLocation = claim.TravelClaim.FromLocation,
                 ToLocation = claim.TravelClaim.ToLocation,
+                PlaceVisited = claim.TravelClaim.PlaceVisited,
+                ModeOfTransport = claim.TravelClaim.ModeOfTransport,
                 TotalKm = claim.TravelClaim.TotalKm,
                 RatePerKm = claim.TravelClaim.RatePerKm,
                 CalculatedAmount = claim.TravelClaim.CalculatedAmount
@@ -338,6 +387,7 @@ public class ClaimService : IClaimService
             FoodDetails = claim.FoodClaim == null ? null : new FoodClaimDto
             {
                 Id = claim.FoodClaim.Id,
+                FoodDate = claim.FoodClaim.FoodDate,
                 Amount = claim.FoodClaim.Amount
             },
             HotelDetails = claim.HotelClaim == null ? null : new HotelClaimDto

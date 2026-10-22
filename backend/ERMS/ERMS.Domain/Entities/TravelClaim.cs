@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -20,6 +20,10 @@ namespace ERMS.Domain.Entities
         public string FromLocation { get; set; } = string.Empty;
 
         public string ToLocation { get; set; } = string.Empty;
+
+        public string? PlaceVisited { get; set; }
+
+        public string? ModeOfTransport { get; set; }
 
         public decimal TotalKm { get; set; }
 

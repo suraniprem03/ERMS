@@ -34,6 +34,31 @@ public static class DbInitializer
                 logger.LogWarning(ex, "Could not alter expense_categories table, it might already have the columns.");
             }
 
+            // Safely add missing columns to food_claims table if they don't exist
+            try
+            {
+                await dbContext.Database.ExecuteSqlRawAsync(@"
+                    ALTER TABLE food_claims ADD COLUMN IF NOT EXISTS food_date date NULL;
+                ");
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Could not alter food_claims table, it might already have the columns.");
+            }
+
+            // Safely add missing columns to travel_claims table if they don't exist
+            try
+            {
+                await dbContext.Database.ExecuteSqlRawAsync(@"
+                    ALTER TABLE travel_claims ADD COLUMN IF NOT EXISTS mode_of_transport varchar(50) NULL;
+                    ALTER TABLE travel_claims ADD COLUMN IF NOT EXISTS place_visited varchar(200) NULL;
+                ");
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Could not alter travel_claims table, it might already have the columns.");
+            }
+
             var seeder = services.GetRequiredService<DataSeeder>();
             await seeder.SeedAsync();
         }

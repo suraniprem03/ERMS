@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: 'https://localhost:7074/api', // Use HTTPS directly to avoid 307 redirect dropping the Authorization header
+  baseURL: import.meta.env.VITE_API_URL || 'https://localhost:7074/api', // Use Environment Variable in Production
   headers: {
     'Content-Type': 'application/json',
   },

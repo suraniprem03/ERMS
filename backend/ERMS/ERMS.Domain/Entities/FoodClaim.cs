@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -12,6 +12,8 @@ namespace ERMS.Domain.Entities
         public long ClaimId { get; set; }
 
         public Claim Claim { get; set; } = default!;
+
+        public DateOnly? FoodDate { get; set; }
 
         public decimal Amount { get; set; }
     }

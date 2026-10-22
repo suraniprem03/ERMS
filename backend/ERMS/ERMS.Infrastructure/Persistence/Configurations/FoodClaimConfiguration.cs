@@ -1,4 +1,4 @@
-﻿using ERMS.Domain.Entities;
+using ERMS.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -12,6 +12,9 @@ public class FoodClaimConfiguration : IEntityTypeConfiguration<FoodClaim>
 
         builder.Property(foodClaim => foodClaim.Amount)
             .HasPrecision(18, 2);
+
+        builder.Property(foodClaim => foodClaim.FoodDate)
+            .IsRequired(false);
 
         builder.HasIndex(foodClaim => foodClaim.ClaimId)
             .IsUnique();
