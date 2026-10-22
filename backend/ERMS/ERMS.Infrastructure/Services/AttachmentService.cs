@@ -6,6 +6,7 @@ using ERMS.Domain.Enums;
 using ERMS.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using System.IO;
+using System.IO.Compression;
 
 namespace ERMS.Infrastructure.Services;
 
@@ -113,6 +114,90 @@ public class AttachmentService : IAttachmentService
 
         _dbContext.ClaimAttachments.Remove(attachment);
         await _dbContext.SaveChangesAsync();
+    }
+
+    public async Task<(byte[] ZipBytes, string FileName)> DownloadMonthlyBillsZipAsync(DateTimeOffset startDate, DateTimeOffset endDate, CancellationToken cancellationToken = default)
+    {
+        var startUtc = startDate.ToUniversalTime();
+        var endUtc = endDate.ToUniversalTime();
+        var startDateOnly = DateOnly.FromDateTime(startDate.Date);
+        var endDateOnly = DateOnly.FromDateTime(endDate.Date);
+
+        var attachments = await _dbContext.ClaimAttachments
+            .Include(a => a.Claim)
+                .ThenInclude(c => c.Employee)
+            .Include(a => a.Claim)
+                .ThenInclude(c => c.ExpenseCategory)
+            .Include(a => a.Claim)
+                .ThenInclude(c => c.TravelClaim)
+            .Include(a => a.Claim)
+                .ThenInclude(c => c.FoodClaim)
+            .Include(a => a.Claim)
+                .ThenInclude(c => c.HotelClaim)
+            .Where(a => a.Claim.Status == ClaimStatus.Approved && (
+                (a.CreatedAt >= startUtc && a.CreatedAt <= endUtc)
+                || (a.Claim.SubmittedAt.HasValue && a.Claim.SubmittedAt >= startUtc && a.Claim.SubmittedAt <= endUtc)
+                || (a.Claim.CreatedAt >= startUtc && a.Claim.CreatedAt <= endUtc)
+                || (a.Claim.TravelClaim != null && a.Claim.TravelClaim.TravelDate >= startDateOnly && a.Claim.TravelClaim.TravelDate <= endDateOnly)
+                || (a.Claim.FoodClaim != null && a.Claim.FoodClaim.FoodDate.HasValue && a.Claim.FoodClaim.FoodDate >= startDateOnly && a.Claim.FoodClaim.FoodDate <= endDateOnly)
+                || (a.Claim.HotelClaim != null && a.Claim.HotelClaim.CheckInDate >= startDateOnly && a.Claim.HotelClaim.CheckInDate <= endDateOnly)))
+            .ToListAsync(cancellationToken);
+
+        using var memoryStream = new MemoryStream();
+        using (var archive = new ZipArchive(memoryStream, ZipArchiveMode.Create, true))
+        {
+            var employeeGroups = attachments
+                .Where(a => a.Claim?.Employee != null)
+                .GroupBy(a => a.Claim.EmployeeId);
+
+            foreach (var group in employeeGroups)
+            {
+                var employee = group.First().Claim.Employee;
+                var rawEmpName = !string.IsNullOrWhiteSpace(employee.Name) ? employee.Name : $"Employee_{employee.Id}";
+                var rawEmpCode = !string.IsNullOrWhiteSpace(employee.EmployeeCode) ? employee.EmployeeCode : $"{employee.Id}";
+
+                var cleanEmpName = string.Join("_", rawEmpName.Split(Path.GetInvalidFileNameChars())).Trim();
+                var cleanEmpCode = string.Join("_", rawEmpCode.Split(Path.GetInvalidFileNameChars())).Trim();
+                var folderName = $"{cleanEmpName}_{cleanEmpCode}";
+
+                var usedEntryNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+                foreach (var att in group)
+                {
+                    if (string.IsNullOrEmpty(att.FilePath) || !File.Exists(att.FilePath))
+                    {
+                        continue;
+                    }
+
+                    var claimNumber = att.Claim?.ClaimNumber ?? $"CLM_{att.ClaimId}";
+                    var categoryName = att.Claim?.ExpenseCategory?.Name ?? "Expense";
+                    var cleanCategory = string.Join("_", categoryName.Split(Path.GetInvalidFileNameChars())).Trim();
+                    var cleanOriginalName = string.Join("_", (att.OriginalFileName ?? "receipt").Split(Path.GetInvalidFileNameChars())).Trim();
+
+                    var entryFileName = $"{folderName}/{claimNumber}_{cleanCategory}_{cleanOriginalName}";
+
+                    // Ensure entry name is unique inside the zip archive
+                    int collisionCounter = 1;
+                    var baseEntryName = entryFileName;
+                    while (usedEntryNames.Contains(entryFileName))
+                    {
+                        var ext = Path.GetExtension(baseEntryName);
+                        var withoutExt = Path.ChangeExtension(baseEntryName, null);
+                        entryFileName = $"{withoutExt}_{collisionCounter}{ext}";
+                        collisionCounter++;
+                    }
+                    usedEntryNames.Add(entryFileName);
+
+                    var entry = archive.CreateEntry(entryFileName, CompressionLevel.Optimal);
+                    using var entryStream = entry.Open();
+                    using var fileStream = new FileStream(att.FilePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+                    await fileStream.CopyToAsync(entryStream, cancellationToken);
+                }
+            }
+        }
+
+        var zipFileName = $"Bills_{startDate:yyyyMMdd}_to_{endDate:yyyyMMdd}.zip";
+        return (memoryStream.ToArray(), zipFileName);
     }
 
     private static ClaimAttachmentDto MapToDto(ClaimAttachment attachment)

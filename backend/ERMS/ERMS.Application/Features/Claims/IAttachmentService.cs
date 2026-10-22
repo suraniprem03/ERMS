@@ -7,4 +7,5 @@ public interface IAttachmentService
     Task<ClaimAttachmentDto> UploadAttachmentAsync(long claimId, long employeeId, string fileName, string contentType, Stream fileStream);
     Task<(Stream FileStream, string ContentType, string FileName)> DownloadAttachmentAsync(long attachmentId, long employeeId, bool isAdmin);
     Task DeleteAttachmentAsync(long attachmentId, long employeeId);
+    Task<(byte[] ZipBytes, string FileName)> DownloadMonthlyBillsZipAsync(DateTimeOffset startDate, DateTimeOffset endDate, CancellationToken cancellationToken = default);
 }

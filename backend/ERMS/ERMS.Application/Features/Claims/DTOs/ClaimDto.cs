@@ -32,4 +32,9 @@ public class ClaimDto
                                ?? HotelDetails?.Amount 
                                ?? RechargeDetails?.Amount 
                                ?? 0;
+
+    public DateOnly? ClaimDate => TravelDetails?.TravelDate 
+                               ?? FoodDetails?.FoodDate 
+                               ?? HotelDetails?.CheckInDate 
+                               ?? (SubmittedAt.HasValue ? DateOnly.FromDateTime(SubmittedAt.Value.DateTime) : null);
 }

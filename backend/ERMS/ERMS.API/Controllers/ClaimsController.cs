@@ -122,7 +122,7 @@ public class ClaimsController : ControllerBase
     }
 
     [HttpPost("{id:long}/process")]
-    // Consider adding [Authorize(Roles = "SUPER_ADMIN,ADMIN")] here
+    [Authorize(Roles = "SUPER_ADMIN,ADMIN")]
     [ProducesResponseType(typeof(ApiResponse<ClaimDto>), StatusCodes.Status200OK)]
     public async Task<ActionResult<ApiResponse<ClaimDto>>> ProcessAdminAction(
         long id,
@@ -138,5 +138,17 @@ public class ClaimsController : ControllerBase
         var claim = await _claimService.ProcessAdminActionAsync(id, adminUserId, request, cancellationToken);
         
         return Ok(ApiResponse<ClaimDto>.Ok(claim, "Admin action processed successfully."));
+    }
+
+    [HttpPost("approve-all")]
+    [Authorize(Roles = "SUPER_ADMIN,ADMIN")]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<ApiResponse<object>>> ApproveAll(
+        [FromBody] BulkApproveRequest? request,
+        CancellationToken cancellationToken)
+    {
+        var adminUserId = GetCurrentUserId();
+        var count = await _claimService.ApproveAllPendingClaimsAsync(adminUserId, request?.Remarks, cancellationToken);
+        return Ok(ApiResponse<object>.Ok(new { count }, $"{count} pending claims have been approved successfully."));
     }
 }
